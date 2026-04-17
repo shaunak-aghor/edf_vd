@@ -110,7 +110,7 @@ void simulate_edf_vd(Task* tasks, int num_tasks, int k_boundary)
 
     int hyperperiod = calculate_hyperperiod(tasks, num_tasks);
     
-    printf("Starting EDF-VD Simulation for Hyperperiod: %d\n", hyperperiod);
+    //printf("Starting EDF-VD Simulation for Hyperperiod: %d\n", hyperperiod);
 
     
     while (current_time < hyperperiod) 

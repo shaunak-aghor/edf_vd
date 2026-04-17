@@ -1,6 +1,6 @@
 #include "../include/common.h"
 #include "../include/min_heap.h"
-// --- Helper Functions (Internal) ---
+//Helper Functions
 
 void swap(HeapNode* a, HeapNode* b) {
     HeapNode temp = *a;
@@ -105,28 +105,26 @@ void update_heap_for_mode_switch(MinHeap* heap, int current_level, int k_boundar
     int i = 0;
     while (i < heap->size) {
         if (heap->data[i].job->task->level < current_level) {
-            // 1. Task is too low criticality. Drop the job!
+            // Task is too low criticality. Drop the job!
             free(heap->data[i].job);
             
             // Swap this slot with the last element in the heap array
             heap->data[i] = heap->data[heap->size - 1];
             heap->size--;
             
-            // Notice we do NOT do i++ here, because we need to check the 
-            // new job that just got swapped into index i!
+            
+            
         } else {
-            // 2. Task survives! Does it need its deadline updated?
+            
             if (current_level > k_boundary) {
                 heap->data[i].job->absolute_deadline = (double)heap->data[i].job->arrival_time + heap->data[i].job->task->virtual_deadline;
-                heap->data[i].priority = heap->data[i].job->absolute_deadline; // Update the sorting label!
+                heap->data[i].priority = heap->data[i].job->absolute_deadline; 
             }
             i++;
         }
     }
 
-    // 3. Re-Heapify (Build-Heap algorithm)
-    // Since we changed priorities and swapped things around, the tree is broken.
-    // We run bubble_down starting from the last parent node up to the root to fix it.
+    // Re-Heapify (Build-Heap algorithm)
     for (int j = (heap->size / 2) - 1; j >= 0; j--) 
     {
         bubble_down(heap, j);

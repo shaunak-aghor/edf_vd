@@ -160,10 +160,10 @@ void handle_mode_switch(int* current_level_ptr, int k_boundary, Job** running_jo
     
     if (*running_job_ptr != NULL && *current_level_ptr > k_boundary) 
     {
-        // It survives, but needs its deadline extended!
+        // needs its deadline extended
         double old_deadline = (*running_job_ptr)->absolute_deadline;
         (*running_job_ptr)->absolute_deadline = (double)(*running_job_ptr)->arrival_time + (*running_job_ptr)->task->relative_deadline;
-        printf(COLOR_YELLOW "[Time %d] Running Job %d (Task %d) survives Mode Switch. Deadline extended: %.2f → %.2f" COLOR_RESET "\n",
+        printf(COLOR_YELLOW "[Time %d] Running Job %d (Task %d) Deadline extended: %.2f → %.2f" COLOR_RESET "\n",
                current_time, (*running_job_ptr)->id, (*running_job_ptr)->task->id,
                old_deadline, (*running_job_ptr)->absolute_deadline);
     }
