@@ -9,7 +9,7 @@
 // Entries default to 1.0 (no scaling). Only entries where a valid k was found are set.
 bool edf_vd_preprocess(TaskState* task_set, int num_tasks, double* x_table, int* k_out);
 
-void simulate_edf_vd(TaskState* tasks, int num_tasks, int k_boundary, double* x_table, FILE* log_file);
+void simulate_edf_vd(CoreState* core);
 
 
 #endif

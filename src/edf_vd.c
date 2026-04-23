@@ -104,7 +104,7 @@ void simulate_edf_vd(CoreState* core)
     int num_tasks = core->num_tasks;
     FILE* log_file = core->log_file;
     int k_boundary = core->k_boundary;
-    int* x_table = core->x_table;
+    double* x_table = core->x_table;
 
     int current_time  = 0;
     int current_level = 1;
