@@ -23,6 +23,7 @@ typedef struct task
     int next_arrival_time;
     double virtual_deadline;
     int job_count;
+    bool active;            
 } Task;
 
 typedef struct job
@@ -37,4 +38,3 @@ typedef struct job
 
 
 #endif
-
