@@ -97,7 +97,7 @@ bool edf_vd_preprocess(Task* task_set, int num_tasks, double* x_table, int* k_ou
 
 // --- Runtime Phase ---
 
-void simulate_edf_vd(Task* tasks, int num_tasks, int k_boundary, double* x_table)
+void simulate_edf_vd(Task* tasks, int num_tasks, int k_boundary, double* x_table, FILE* log_file)
 {
     int current_time  = 0;
     int current_level = 1;
@@ -136,23 +136,23 @@ void simulate_edf_vd(Task* tasks, int num_tasks, int k_boundary, double* x_table
 
         // Handle events in order: completion before mode-switch before arrival.
         if (current_time == t_next_completion)
-            handle_job_completion(&running_job, current_time);
+            handle_job_completion(&running_job, current_time, log_file);
 
         if (current_time == t_next_mode_switch)
             handle_mode_switch(&current_level, k_boundary, &running_job,
-                priority_queue, current_time, tasks, num_tasks, x_table);
+                priority_queue, current_time, tasks, num_tasks, x_table, log_file);
 
         if (current_time == t_next_arrival)
-            handle_job_arrival(tasks, num_tasks, current_time, priority_queue);
+            handle_job_arrival(tasks, num_tasks, current_time, priority_queue, log_file);
 
         // Dispatcher: pick from queue if CPU is free.
         if (running_job == NULL && !heap_is_empty(priority_queue))
         {
             running_job = heap_pop(priority_queue);
             if (running_job != NULL)
-                printf(COLOR_BLUE "[Time %d] CPU DISPATCH: Job %d (Task %d) starts execution."
-                       COLOR_RESET "\n",
-                       current_time, running_job->id, running_job->task->id);
+                log_write(log_file, current_time,
+                         "CPU DISPATCH: Job %d (Task %d) starts execution.",
+                         running_job->id, running_job->task->id);
         }
         
         // Preemption check
@@ -161,18 +161,17 @@ void simulate_edf_vd(Task* tasks, int num_tasks, int k_boundary, double* x_table
             Job* peek = heap_peek(priority_queue);
             if (peek != NULL && peek->absolute_deadline + EPSILON < running_job->absolute_deadline)
             {
-                printf(COLOR_YELLOW "[Time %d] PREEMPTION: Job %d (Task %d) preempted by "
-                       "Job %d (Task %d)!" COLOR_RESET "\n",
-                       current_time,
-                       running_job->id, running_job->task->id,
-                       peek->id,        peek->task->id);
+                log_write(log_file, current_time,
+                         "PREEMPTION: Job %d (Task %d) preempted by Job %d (Task %d)!",
+                         running_job->id, running_job->task->id,
+                         peek->id,        peek->task->id);
 
                 heap_push(priority_queue, running_job, running_job->absolute_deadline);
                 running_job = heap_pop(priority_queue);
 
-                printf(COLOR_BLUE "[Time %d] CPU DISPATCH: Job %d (Task %d) starts execution "
-                       "(post-preemption)." COLOR_RESET "\n",
-                       current_time, running_job->id, running_job->task->id);
+                log_write(log_file, current_time,
+                         "CPU DISPATCH: Job %d (Task %d) starts execution (post-preemption).",
+                         running_job->id, running_job->task->id);
             }
         }
     }
@@ -187,6 +186,7 @@ void simulate_edf_vd(Task* tasks, int num_tasks, int k_boundary, double* x_table
 
     heap_destroy(priority_queue);
 
-    printf(COLOR_MAGENTA "\nSimulation completed at t=%d (hyperperiod=%d)." COLOR_RESET "\n",
-           current_time, hyperperiod);
+    log_write(log_file, current_time,
+              "Simulation completed at t=%d (hyperperiod=%d).",
+              current_time, hyperperiod);
 }

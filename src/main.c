@@ -68,8 +68,19 @@ int main(int argc, char* argv[])
 
         printf("\n" COLOR_MAGENTA "--- STARTING EDF-VD RUNTIME SIMULATION ---" COLOR_RESET "\n\n");
 
+        // Open log file for this core (core_0.log for now, single-core)
+        FILE* log_file = fopen("logs/core_0.log", "w");
+        if (log_file == NULL)
+        {
+            printf("[ERROR] Could not open logs/core_0.log for writing\n");
+            return -3;
+        }
+
         srand(42);  // fixed seed for reproducible runs
-        simulate_edf_vd(tasks, num_tasks, k_result, x_table);
+        simulate_edf_vd(tasks, num_tasks, k_result, x_table, log_file);
+
+        fclose(log_file);
+        printf("[INFO] Simulation log written to logs/core_0.log\n");
     }
     else
     {

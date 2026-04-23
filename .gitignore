@@ -3,3 +3,6 @@
 
 # Ignore everything in bin directory
 bin/
+
+# Ignore log files
+logs/*.log

@@ -2,6 +2,10 @@
 #define UTILS_H
 
 #include "min_heap.h"
+#include <stdio.h>
+
+// logging function
+void log_write(FILE* log_file, int timestamp, const char* fmt, ...);
 
 // helper functions
 double get_utilization(int wcet, int period);
@@ -13,18 +17,18 @@ int get_next_completion_time(Job* running_job, int current_time);
 int get_next_mode_switch_time(Job* running_job, int current_level, int current_time);
 
 // event handlers
-void handle_job_completion(Job** running_job_ptr, int current_time);
+void handle_job_completion(Job** running_job_ptr, int current_time, FILE* log_file);
 
 // num_tasks is a plain int now — we never mutate the task array size.
 // x_table[k-1] holds the x_min computed for level boundary k, used to
 // recalculate virtual deadlines when the system transitions to a new level.
 void handle_mode_switch(int* current_level_ptr, int k_boundary, Job** running_job_ptr,
                         MinHeap* priority_queue, int current_time,
-                        Task* tasks, int num_tasks, double* x_table);
+                        Task* tasks, int num_tasks, double* x_table, FILE* log_file);
 
-void handle_job_arrival(Task* tasks, int num_tasks, int current_time, MinHeap* priority_queue);
+void handle_job_arrival(Task* tasks, int num_tasks, int current_time, MinHeap* priority_queue, FILE* log_file);
 
 // logging
-void print_system_state(int current_time, int current_level, Job* running_job, MinHeap* queue);
+void print_system_state(int current_time, int current_level, Job* running_job, MinHeap* queue, FILE* log_file);
 
 #endif
