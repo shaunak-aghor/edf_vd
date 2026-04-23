@@ -14,7 +14,7 @@ static int min3(int a, int b, int c) {
 
 // --- Offline Phase ---
 
-bool edf_vd_preprocess(Task* task_set, int num_tasks, double* x_table, int* k_out)
+bool edf_vd_preprocess(TaskState* task_set, int num_tasks, double* x_table, int* k_out)
 {
     // Default all x values to 1.0 (no scaling). Only overwritten if a valid k is found.
     for (int i = 0; i < num_levels; i++)
@@ -25,8 +25,8 @@ bool edf_vd_preprocess(Task* task_set, int num_tasks, double* x_table, int* k_ou
     double sum_Ul_l = 0.0;
     for (int i = 0; i < num_tasks; i++)
     {
-        int cur_level = task_set[i].level;
-        sum_Ul_l += get_utilization(task_set[i].wcets[cur_level - 1], task_set[i].period);
+        int cur_level = task_set[i].def->level;
+        sum_Ul_l += get_utilization(task_set[i].def->wcets[cur_level - 1], task_set[i].def->period);
     }
 
     // If total utilization <= 1.0, no virtual deadline scaling is needed.
@@ -36,7 +36,7 @@ bool edf_vd_preprocess(Task* task_set, int num_tasks, double* x_table, int* k_ou
         *k_out = 0;
         // x_table already all 1.0 from initialization above
         for (int i = 0; i < num_tasks; i++)
-            task_set[i].virtual_deadline = task_set[i].period;
+            task_set[i].virtual_deadline = task_set[i].def->period;
 
         return true;
     }
@@ -50,17 +50,17 @@ bool edf_vd_preprocess(Task* task_set, int num_tasks, double* x_table, int* k_ou
 
         for (int j = 0; j < num_tasks; j++)
         {
-            Task task = task_set[j];
-            int cur_level = task.level;
+            TaskState task = task_set[j];
+            int cur_level = task.def->level;
 
             if (cur_level <= k)
             {
-                u_lo_lo += get_utilization(task.wcets[cur_level - 1], task.period);
+                u_lo_lo += get_utilization(task.def->wcets[cur_level - 1], task.def->period);
             }
             else
             {
-                u_hi_k  += get_utilization(task.wcets[k - 1],         task.period);
-                u_hi_hi += get_utilization(task.wcets[cur_level - 1], task.period);
+                u_hi_k  += get_utilization(task.def->wcets[k - 1], task.def->period);
+                u_hi_hi += get_utilization(task.def->wcets[cur_level - 1], task.def->period);
             }
         }
 
@@ -81,10 +81,10 @@ bool edf_vd_preprocess(Task* task_set, int num_tasks, double* x_table, int* k_ou
             // Assign virtual deadlines based on which side of k each task sits.
             for (int i = 0; i < num_tasks; i++)
             {
-                if (task_set[i].level <= k)
-                    task_set[i].virtual_deadline = task_set[i].period;
+                if (task_set[i].def->level <= k)
+                    task_set[i].virtual_deadline = task_set[i].def->period;
                 else
-                    task_set[i].virtual_deadline = x_min * task_set[i].period;
+                    task_set[i].virtual_deadline = x_min * task_set[i].def->period;
             }
 
             return true;
@@ -97,7 +97,7 @@ bool edf_vd_preprocess(Task* task_set, int num_tasks, double* x_table, int* k_ou
 
 // --- Runtime Phase ---
 
-void simulate_edf_vd(Task* tasks, int num_tasks, int k_boundary, double* x_table, FILE* log_file)
+void simulate_edf_vd(TaskState* tasks, int num_tasks, int k_boundary, double* x_table, FILE* log_file)
 {
     int current_time  = 0;
     int current_level = 1;
@@ -152,7 +152,7 @@ void simulate_edf_vd(Task* tasks, int num_tasks, int k_boundary, double* x_table
             if (running_job != NULL)
                 log_write(log_file, current_time,
                          "CPU DISPATCH: Job %d (Task %d) starts execution.",
-                         running_job->id, running_job->task->id);
+                         running_job->id, running_job->task->def->id);
         }
         
         // Preemption check
@@ -163,15 +163,15 @@ void simulate_edf_vd(Task* tasks, int num_tasks, int k_boundary, double* x_table
             {
                 log_write(log_file, current_time,
                          "PREEMPTION: Job %d (Task %d) preempted by Job %d (Task %d)!",
-                         running_job->id, running_job->task->id,
-                         peek->id,        peek->task->id);
+                         running_job->id, running_job->task->def->id,
+                         peek->id,        peek->task->def->id);
 
                 heap_push(priority_queue, running_job, running_job->absolute_deadline);
                 running_job = heap_pop(priority_queue);
 
                 log_write(log_file, current_time,
                          "CPU DISPATCH: Job %d (Task %d) starts execution (post-preemption).",
-                         running_job->id, running_job->task->id);
+                         running_job->id, running_job->task->def->id);
             }
         }
     }

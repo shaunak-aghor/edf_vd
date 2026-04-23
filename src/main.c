@@ -17,7 +17,9 @@ int main(int argc, char* argv[])
 
     int num_tasks = 0;
     fscanf(task_file, "%d", &num_tasks);
-    Task tasks[num_tasks];
+    
+    TaskDef  defs[num_tasks];
+    TaskState tasks[num_tasks];
 
     for (int i = 0; i < num_tasks; i++)
     {
@@ -32,15 +34,16 @@ int main(int argc, char* argv[])
 
         fscanf(task_file, "%d %d\n", &period, &relative_deadline);
 
-        tasks[i].id                 = i;
+        defs[i].id                 = i;
         tasks[i].job_count          = 0;
-        tasks[i].level              = level;
-        tasks[i].arrival_time       = arrival_time;
+        defs[i].level              = level;
+        defs[i].arrival_time       = arrival_time;
         tasks[i].next_arrival_time  = arrival_time;
-        tasks[i].period             = period;
-        tasks[i].relative_deadline  = relative_deadline;
+        defs[i].period             = period;
+        defs[i].relative_deadline  = relative_deadline;
         tasks[i].active             = true;   // all tasks start active
-        memcpy(tasks[i].wcets, wcets, num_levels * sizeof(int));
+        tasks[i].def = &defs[i];
+        memcpy(defs[i].wcets, wcets, num_levels * sizeof(int));
     }
 
     fclose(task_file);
@@ -62,8 +65,8 @@ int main(int argc, char* argv[])
 
         for (int i = 0; i < num_tasks; i++)
             printf("  Task %d | level=%d | period=%d | wcets=[%d,%d] | virtual_deadline=%.4f\n",
-                   tasks[i].id, tasks[i].level, tasks[i].period,
-                   tasks[i].wcets[0], tasks[i].wcets[1],
+                   defs[i].id, defs[i].level, defs[i].period,
+                   defs[i].wcets[0], defs[i].wcets[1],
                    tasks[i].virtual_deadline);
 
         printf("\n" COLOR_MAGENTA "--- STARTING EDF-VD RUNTIME SIMULATION ---" COLOR_RESET "\n\n");

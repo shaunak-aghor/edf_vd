@@ -41,11 +41,11 @@ int lcm(int num1, int num2)
     return (copy_num1 * copy_num2) / num1;
 }
 
-int calculate_hyperperiod(Task* task_set, int num_tasks)
+int calculate_hyperperiod(TaskState* task_set, int num_tasks)
 {
-    int _lcm = task_set[0].period;
+    int _lcm = task_set[0].def->period;
     for (int i = 1; i < num_tasks; i++)
-        _lcm = lcm(_lcm, task_set[i].period);
+        _lcm = lcm(_lcm, task_set[i].def->period);
     return _lcm;
 }
 
@@ -57,7 +57,7 @@ double get_utilization(int wcet, int period)
 
 // --- Timing functions ---
 
-int get_next_arrival_time(Task* tasks, int num_tasks)
+int get_next_arrival_time(TaskState* tasks, int num_tasks)
 {
     int min_arrival = INT_MAX;
     for (int i = 0; i < num_tasks; i++)
@@ -81,7 +81,7 @@ int get_next_mode_switch_time(Job* running_job, int current_level, int current_t
 
     // A mode switch fires when the running job burns through its budget
     // for the current criticality level.
-    int current_wcet_budget     = running_job->task->wcets[current_level - 1];
+    int current_wcet_budget     = running_job->task->def->wcets[current_level - 1];
     int budget_remaining         = current_wcet_budget - running_job->time_executed;
 
     // Only fires if the job would actually exceed the budget before finishing.
@@ -100,7 +100,7 @@ void handle_job_completion(Job** running_job_ptr, int current_time, FILE* log_fi
     {
         log_write(log_file, current_time, 
                   "Job %d (Task %d) COMPLETED.",
-                  (*running_job_ptr)->id, (*running_job_ptr)->task->id);
+                  (*running_job_ptr)->id, (*running_job_ptr)->task->def->id);
 
         free(*running_job_ptr);
         *running_job_ptr = NULL;
@@ -109,7 +109,7 @@ void handle_job_completion(Job** running_job_ptr, int current_time, FILE* log_fi
 
 void handle_mode_switch(int* current_level_ptr, int k_boundary, Job** running_job_ptr,
                         MinHeap* priority_queue, int current_time,
-                        Task* tasks, int num_tasks, double* x_table, FILE* log_file)
+                        TaskState* tasks, int num_tasks, double* x_table, FILE* log_file)
 {
     (*current_level_ptr)++;
     int new_level = *current_level_ptr;
@@ -132,29 +132,29 @@ void handle_mode_switch(int* current_level_ptr, int k_boundary, Job** running_jo
     {
         if (!tasks[i].active) continue;
 
-        if (tasks[i].level < new_level)
+        if (tasks[i].def->level < new_level)
         {
             tasks[i].active = false;    // mark dropped
             log_write(log_file, current_time,
                       "Task %d (level %d) dropped permanently.",
-                      tasks[i].id, tasks[i].level);
+                      tasks[i].def->id, tasks[i].def->level);
         }
         else
         {
             // Recalculate virtual deadline with the correct x for this level.
-            tasks[i].virtual_deadline = new_x * tasks[i].period;
+            tasks[i].virtual_deadline = new_x * tasks[i].def->period;
         }
     }
 
     // Handle the currently running job.
     if (*running_job_ptr != NULL)
     {
-        if ((*running_job_ptr)->task->level < new_level)
+        if ((*running_job_ptr)->task->def->level < new_level)
         {
             // The running job belongs to a now-dropped task. Kill it immediately.
             log_write(log_file, current_time,
                       "Running Job %d (Task %d) killed — task dropped.",
-                      (*running_job_ptr)->id, (*running_job_ptr)->task->id);
+                      (*running_job_ptr)->id, (*running_job_ptr)->task->def->id);
             free(*running_job_ptr);
             *running_job_ptr = NULL;
         }
@@ -167,7 +167,7 @@ void handle_mode_switch(int* current_level_ptr, int k_boundary, Job** running_jo
 
             log_write(log_file, current_time,
                       "Running Job %d (Task %d) deadline updated: %.2f -> %.2f",
-                      (*running_job_ptr)->id, (*running_job_ptr)->task->id,
+                      (*running_job_ptr)->id, (*running_job_ptr)->task->def->id,
                       old_dl, (*running_job_ptr)->absolute_deadline);
         }
     }
@@ -176,7 +176,7 @@ void handle_mode_switch(int* current_level_ptr, int k_boundary, Job** running_jo
     update_heap_for_mode_switch(priority_queue, new_level, k_boundary);
 }
 
-void handle_job_arrival(Task* tasks, int num_tasks, int current_time, MinHeap* priority_queue, FILE* log_file)
+void handle_job_arrival(TaskState* tasks, int num_tasks, int current_time, MinHeap* priority_queue, FILE* log_file)
 {
     for (int i = 0; i < num_tasks; i++)
     {
@@ -192,7 +192,7 @@ void handle_job_arrival(Task* tasks, int num_tasks, int current_time, MinHeap* p
             new_job->time_executed       = 0;
 
             // Randomised execution time between 1 and the task's highest-level WCET.
-            int highest_wcet             = tasks[i].wcets[tasks[i].level - 1];
+            int highest_wcet             = tasks[i].def->wcets[tasks[i].def->level - 1];
             new_job->exec_time_remaining = (rand() % highest_wcet) + 1;
 
             // Absolute deadline uses the virtual deadline assigned during preprocessing
@@ -203,9 +203,9 @@ void handle_job_arrival(Task* tasks, int num_tasks, int current_time, MinHeap* p
 
             log_write(log_file, current_time,
                       "Task %d arrived. Spawned Job %d (Exec: %d, DL: %.2f).",
-                      tasks[i].id, new_job->id, new_job->exec_time_remaining, new_job->absolute_deadline);
+                      tasks[i].def->id, new_job->id, new_job->exec_time_remaining, new_job->absolute_deadline);
 
-            tasks[i].next_arrival_time += tasks[i].period;
+            tasks[i].next_arrival_time += tasks[i].def->period;
         }
     }
 }
@@ -229,7 +229,7 @@ void print_system_state(int current_time, int current_level, Job* running_job, M
     {
         int total = running_job->time_executed + running_job->exec_time_remaining;
         fprintf(log_file, "Job %d (Task %d) | Exec: %d/%d | Deadline: %.2f\n",
-               running_job->id, running_job->task->id,
+               running_job->id, running_job->task->def->id,
                running_job->time_executed, total,
                running_job->absolute_deadline);
     }
@@ -244,7 +244,7 @@ void print_system_state(int current_time, int current_level, Job* running_job, M
         for (int i = 0; i < queue->size; i++)
         {
             Job* j = queue->data[i].job;
-            fprintf(log_file, "[J%d_T%d DL:%.1f] ", j->id, j->task->id, j->absolute_deadline);
+            fprintf(log_file, "[J%d_T%d DL:%.1f] ", j->id, j->task->def->id, j->absolute_deadline);
         }
         fprintf(log_file, "\n");
     }

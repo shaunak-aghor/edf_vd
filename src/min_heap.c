@@ -104,7 +104,7 @@ bool heap_is_empty(MinHeap* heap) {
 void update_heap_for_mode_switch(MinHeap* heap, int current_level, int k_boundary) {
     int i = 0;
     while (i < heap->size) {
-        if (heap->data[i].job->task->level < current_level) {
+        if (heap->data[i].job->task->def->level < current_level) {
             // Task is too low criticality. Drop the job!
             free(heap->data[i].job);
             

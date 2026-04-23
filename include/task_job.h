@@ -11,8 +11,7 @@
 #define COLOR_CYAN    "\x1b[36m" // System State Dump
 #define COLOR_MAGENTA "\x1b[35m" // Offline Phase / Hyperperiod info
 
-
-typedef struct task
+typedef struct taskDef
 {
     int id;
     int level;
@@ -20,21 +19,33 @@ typedef struct task
     int period;
     int wcets[num_levels];
     int relative_deadline;
+} TaskDef;
+
+typedef struct task
+{
+    TaskDef* def;
     int next_arrival_time;
     double virtual_deadline;
     int job_count;
     bool active;            
-} Task;
+} TaskState;
 
 typedef struct job
 {
     int id;
-    Task* task;
+    TaskState* task;
     int arrival_time;  
     double absolute_deadline;
     int exec_time_remaining;
     int time_executed;
 } Job;
+
+typedef struct coreState
+{
+    TaskState* tasks;
+    
+
+} CoreState;
 
 
 #endif
