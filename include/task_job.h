@@ -1,3 +1,4 @@
+#include "min_heap.h"
 #ifndef TASK_JOB_H
 #define TASK_JOB_H
 
@@ -42,9 +43,14 @@ typedef struct job
 
 typedef struct coreState
 {
+    int core_id;
+    int current_level;
+    double x_table[num_levels];
+    int k_boundary;
+    FILE* log_file;
+    MinHeap* ready_queue;
+    Job* running_job;
     TaskState* tasks;
-    
-
 } CoreState;
 
 

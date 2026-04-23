@@ -9,10 +9,10 @@ void log_write(FILE* log_file, int timestamp, const char* fmt, ...);
 
 // helper functions
 double get_utilization(int wcet, int period);
-int calculate_hyperperiod(Task* task_set, int num_tasks);
+int calculate_hyperperiod(TaskState* task_set, int num_tasks);
 
 // timing functions
-int get_next_arrival_time(Task* tasks, int num_tasks);
+int get_next_arrival_time(TaskState* tasks, int num_tasks);
 int get_next_completion_time(Job* running_job, int current_time);
 int get_next_mode_switch_time(Job* running_job, int current_level, int current_time);
 
@@ -24,9 +24,9 @@ void handle_job_completion(Job** running_job_ptr, int current_time, FILE* log_fi
 // recalculate virtual deadlines when the system transitions to a new level.
 void handle_mode_switch(int* current_level_ptr, int k_boundary, Job** running_job_ptr,
                         MinHeap* priority_queue, int current_time,
-                        Task* tasks, int num_tasks, double* x_table, FILE* log_file);
+                        TaskState* tasks, int num_tasks, double* x_table, FILE* log_file);
 
-void handle_job_arrival(Task* tasks, int num_tasks, int current_time, MinHeap* priority_queue, FILE* log_file);
+void handle_job_arrival(TaskState* tasks, int num_tasks, int current_time, MinHeap* priority_queue, FILE* log_file);
 
 // logging
 void print_system_state(int current_time, int current_level, Job* running_job, MinHeap* queue, FILE* log_file);
