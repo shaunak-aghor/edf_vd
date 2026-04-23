@@ -97,8 +97,15 @@ bool edf_vd_preprocess(TaskState* task_set, int num_tasks, double* x_table, int*
 
 // --- Runtime Phase ---
 
-void simulate_edf_vd(TaskState* tasks, int num_tasks, int k_boundary, double* x_table, FILE* log_file)
+void simulate_edf_vd(CoreState* core)
 {
+
+    TaskState* tasks = core->tasks;
+    int num_tasks = core->num_tasks;
+    FILE* log_file = core->log_file;
+    int k_boundary = core->k_boundary;
+    int* x_table = core->x_table;
+
     int current_time  = 0;
     int current_level = 1;
     Job* running_job  = NULL;

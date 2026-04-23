@@ -1,7 +1,7 @@
-#include "min_heap.h"
 #ifndef TASK_JOB_H
 #define TASK_JOB_H
 
+#include "min_heap.h"
 #define num_levels 2
 
 #define COLOR_RESET   "\x1b[0m"
@@ -51,6 +51,7 @@ typedef struct coreState
     MinHeap* ready_queue;
     Job* running_job;
     TaskState* tasks;
+    int num_tasks;
 } CoreState;
 
 
