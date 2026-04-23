@@ -104,29 +104,25 @@ bool heap_is_empty(MinHeap* heap) {
 void update_heap_for_mode_switch(MinHeap* heap, int current_level, int k_boundary) {
     int i = 0;
     while (i < heap->size) {
-        if (heap->data[i].job->task->def->level < current_level) {
-            // Task is too low criticality. Drop the job!
+        if (heap->data[i].job->task->def->level < current_level) 
+        {
             free(heap->data[i].job);
-            
-            // Swap this slot with the last element in the heap array
             heap->data[i] = heap->data[heap->size - 1];
             heap->size--;
-            
-            
-            
-        } else {
-            
-            if (current_level > k_boundary) {
-                heap->data[i].job->absolute_deadline = (double)heap->data[i].job->arrival_time + heap->data[i].job->task->virtual_deadline;
-                heap->data[i].priority = heap->data[i].job->absolute_deadline; 
-            }
+        } 
+        else 
+        {
             i++;
         }
     }
 
-    // Re-Heapify (Build-Heap algorithm)
-    for (int j = (heap->size / 2) - 1; j >= 0; j--) 
-    {
-        bubble_down(heap, j);
+    if (current_level > k_boundary) {
+        for (int i = 0; i < heap->size; i++) {
+            heap->data[i].job->absolute_deadline = (double)heap->data[i].job->arrival_time + heap->data[i].job->task->virtual_deadline;
+            heap->data[i].priority = heap->data[i].job->absolute_deadline;
+        }
     }
+
+    for (int j = (heap->size / 2) - 1; j >= 0; j--)
+    bubble_down(heap, j);
 }
