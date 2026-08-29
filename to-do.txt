@@ -6,10 +6,11 @@
 
 
 ->multi-core
-    ->Core Abstraction
-    ->CPU Abstraction
-    ->Global queue
-    ->Synchronisation
+    ->Core Abstraction ✅
+    ->CPU Abstraction ✅
+    ->local queue ✅
+    ->Synchronisation 
 
-->make it compatible with more than two level system.
-->Better Logging and file structuring.
+
+-> do we want the preprocessing running per core ?
+-> how do we communicate the mode switch caused in one core to the other cores ?

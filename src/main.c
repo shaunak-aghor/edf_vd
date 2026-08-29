@@ -1,11 +1,11 @@
 #include "../include/common.h"
+#include "../include/partition.h"
 
 static CPU* g_cpu = NULL;
 
 static void* core_worker(void* arg)
 {
-    int core_id = *(int*)arg;
-    Core* core = &g_cpu->cores[core_id];
+    Core* core = (Core *) arg;
     simulate_edf_vd(g_cpu, core);
     return NULL;
 }
@@ -14,7 +14,7 @@ int main(int argc, char* argv[])
 {
     if (argc < 2)
     {
-        printf("usage: %s <taskset.txt>\n", argv[0]);
+        printf("usage: %s <taskset.txt> [num_cores]\n", argv[0]);
         return -1;
     }
 
@@ -56,6 +56,7 @@ int main(int argc, char* argv[])
         tasks[i].job_count         = 0;
         tasks[i].virtual_deadline  = 0.0;
         tasks[i].active            = true;
+        tasks[i].assigned_core     = -1;
     }
 
     fclose(task_file);
@@ -83,18 +84,35 @@ int main(int argc, char* argv[])
                defs[i].wcets[0], defs[i].wcets[1],
                tasks[i].virtual_deadline);
 
-    printf("\n" COLOR_MAGENTA "--- STARTING EDF-VD RUNTIME SIMULATION ---" COLOR_RESET "\n\n");
-
-    FILE* log_file = fopen("logs/core_0.log", "w");
-    if (log_file == NULL)
+    int num_cores = argc >= 3 ? atoi(argv[2]) : 1;
+    if (num_cores <= 0)
     {
-        printf("[ERROR] Could not open logs/core_0.log for writing\n");
+        printf("[ERROR] Number of cores must be greater than zero.\n");
         return -4;
     }
 
-    int num_cores = 1;
+    if (!partition_tasks(tasks, num_tasks, num_cores))
+    {
+        printf("[ERROR] Could not partition tasks across %d cores.\n", num_cores);
+        return -5;
+    }
+
+    int core_task_counts[num_cores];
+    for (int core = 0; core < num_cores; core++)
+        core_task_counts[core] = 0;
+
+    for (int task = 0; task < num_tasks; task++)
+        core_task_counts[tasks[task].assigned_core]++;
+
+    printf("\n" COLOR_MAGENTA "--- STARTING EDF-VD RUNTIME SIMULATION ---" COLOR_RESET "\n\n");
+
     CPU cpu;
-    Core cores[num_cores];
+    Core* cores = calloc(num_cores, sizeof(Core));
+    if (cores == NULL)
+    {
+        printf("[ERROR] Could not allocate cores.\n");
+        return -6;
+    }
 
     cpu.num_cores      = num_cores;
     cpu.cores          = cores;
@@ -102,38 +120,62 @@ int main(int argc, char* argv[])
     cpu.k_boundary     = k_result;
     cpu.tasks          = tasks;
     cpu.num_tasks      = num_tasks;
-    cpu.ready_queue    = heap_init(64);
-    cpu.log_file       = log_file;
-    pthread_mutex_init(&cpu.queue_lock, NULL);
     memcpy(cpu.x_table, x_table, num_levels * sizeof(double));
 
     for (int i = 0; i < num_cores; i++)
     {
-        cores[i].core_id   = i;
+        cores[i].core_id     = i;
         cores[i].running_job = NULL;
-        cores[i].log_file   = log_file;
+        cores[i].num_core_tasks = core_task_counts[i];
+        cores[i].core_tasks = calloc(core_task_counts[i] > 0 ? core_task_counts[i] : 1,
+                                     sizeof(TaskState));
+
+        char log_path[64];
+        snprintf(log_path, sizeof(log_path), "logs/core_%d.log", i);
+        cores[i].log_file = fopen(log_path, "w");
+
+        if (cores[i].core_tasks == NULL || cores[i].log_file == NULL)
+        {
+            printf("[ERROR] Could not initialize core %d.\n", i);
+            for (int cleanup = 0; cleanup <= i; cleanup++)
+            {
+                if (cores[cleanup].log_file != NULL)
+                    fclose(cores[cleanup].log_file);
+                free(cores[cleanup].core_tasks);
+            }
+            free(cores);
+            return -7;
+        }
+
+        int local_task = 0;
+        for (int task = 0; task < num_tasks; task++)
+        {
+            if (tasks[task].assigned_core == i)
+                cores[i].core_tasks[local_task++] = tasks[task];
+        }
     }
 
     srand(42);
     g_cpu = &cpu;
 
     pthread_t threads[num_cores];
-    int core_ids[num_cores];
 
     for (int i = 0; i < num_cores; i++)
     {
-        core_ids[i] = i;
-        pthread_create(&threads[i], NULL, core_worker, &core_ids[i]);
+        pthread_create(&threads[i], NULL, core_worker, &cores[i]);
     }
 
     for (int i = 0; i < num_cores; i++)
         pthread_join(threads[i], NULL);
 
-    pthread_mutex_destroy(&cpu.queue_lock);
-    heap_destroy(cpu.ready_queue);
+    for (int i = 0; i < num_cores; i++)
+    {
+        fclose(cores[i].log_file);
+        free(cores[i].core_tasks);
+    }
+    free(cores);
 
-    fclose(log_file);
-    printf("[INFO] Simulation log written to logs/core_0.log\n");
+    printf("[INFO] Simulation logs written to logs/core_<n>.log\n");
 
     return 0;
 }

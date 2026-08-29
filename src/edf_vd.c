@@ -99,16 +99,24 @@ bool edf_vd_preprocess(TaskState* task_set, int num_tasks, double* x_table, int*
 
 void simulate_edf_vd(CPU* cpu, Core* core)
 {
-    TaskState* tasks = cpu->tasks;
-    int num_tasks = cpu->num_tasks;
+    TaskState* tasks = core->core_tasks;
+    int num_tasks = core->num_core_tasks;
     FILE* log_file = core->log_file;
     int k_boundary = cpu->k_boundary;
     double* x_table = cpu->x_table;
 
+    core->ready_queue = heap_init(64);
+
     int current_time  = 0;
-    int current_level = cpu->current_level;
-    Job* running_job  = core->running_job;
-    MinHeap* priority_queue = cpu->ready_queue;
+    int current_level = 1;
+    Job* running_job  = NULL;
+    MinHeap* priority_queue = core->ready_queue;
+
+    if (priority_queue == NULL)
+    {
+        fprintf(stderr, "[FATAL] Could not initialize the core-local ready queue.\n");
+        return;
+    }
 
     int hyperperiod = calculate_hyperperiod(tasks, num_tasks);
 
@@ -140,28 +148,19 @@ void simulate_edf_vd(CPU* cpu, Core* core)
             handle_job_completion(&running_job, current_time, log_file);
 
         if (current_time == t_next_mode_switch)
-            handle_mode_switch(&cpu->current_level, k_boundary, &running_job,
-                              priority_queue, &cpu->queue_lock,
+            handle_mode_switch(&current_level, k_boundary, &running_job,
+                              priority_queue,
                               current_time, tasks, num_tasks, x_table, log_file);
-
-        current_level = cpu->current_level;
 
         if (current_time == t_next_arrival)
             handle_job_arrival(tasks, num_tasks, current_time,
-                              priority_queue, &cpu->queue_lock, log_file);
+                              priority_queue, log_file);
 
         if (running_job == NULL)
         {
-            bool queue_empty = false;
-            pthread_mutex_lock(&cpu->queue_lock);
-            queue_empty = heap_is_empty(priority_queue);
-            pthread_mutex_unlock(&cpu->queue_lock);
-
-            if (!queue_empty)
+            if (!heap_is_empty(priority_queue))
             {
-                pthread_mutex_lock(&cpu->queue_lock);
                 running_job = heap_pop(priority_queue);
-                pthread_mutex_unlock(&cpu->queue_lock);
 
                 if (running_job != NULL)
                 {
@@ -174,17 +173,9 @@ void simulate_edf_vd(CPU* cpu, Core* core)
         }
         else
         {
-            bool queue_empty = false;
-            pthread_mutex_lock(&cpu->queue_lock);
-            queue_empty = heap_is_empty(priority_queue);
-            pthread_mutex_unlock(&cpu->queue_lock);
-
-            if (!queue_empty)
+            if (!heap_is_empty(priority_queue))
             {
-                Job* peek = NULL;
-                pthread_mutex_lock(&cpu->queue_lock);
-                peek = heap_peek(priority_queue);
-                pthread_mutex_unlock(&cpu->queue_lock);
+                Job* peek = heap_peek(priority_queue);
 
                 if (peek != NULL && peek->absolute_deadline + EPSILON < running_job->absolute_deadline)
                 {
@@ -193,10 +184,8 @@ void simulate_edf_vd(CPU* cpu, Core* core)
                              running_job->id, running_job->task->def->id,
                              peek->id,        peek->task->def->id);
 
-                    pthread_mutex_lock(&cpu->queue_lock);
                     heap_push(priority_queue, running_job, running_job->absolute_deadline);
                     running_job = heap_pop(priority_queue);
-                    pthread_mutex_unlock(&cpu->queue_lock);
 
                     if (running_job != NULL)
                     {
@@ -212,20 +201,9 @@ void simulate_edf_vd(CPU* cpu, Core* core)
         core->running_job = running_job;
     }
 
-    while (1)
+    while (!heap_is_empty(priority_queue))
     {
-        bool queue_empty = false;
-        pthread_mutex_lock(&cpu->queue_lock);
-        queue_empty = heap_is_empty(priority_queue);
-        pthread_mutex_unlock(&cpu->queue_lock);
-
-        if (queue_empty)
-            break;
-
-        Job* j = NULL;
-        pthread_mutex_lock(&cpu->queue_lock);
-        j = heap_pop(priority_queue);
-        pthread_mutex_unlock(&cpu->queue_lock);
+        Job* j = heap_pop(priority_queue);
 
         if (j) free(j);
     }
@@ -236,6 +214,9 @@ void simulate_edf_vd(CPU* cpu, Core* core)
         running_job = NULL;
     }
     core->running_job = NULL;
+
+    heap_destroy(priority_queue);
+    core->ready_queue = NULL;
 
     log_write(log_file, current_time,
               "Simulation completed at t=%d (hyperperiod=%d).",

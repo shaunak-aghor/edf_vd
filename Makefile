@@ -6,7 +6,7 @@ CFLAGS = -Wall -Wextra -g -Iinclude -pthread
 TARGET = bin/edf_vd_sim
 
 
-SRCS = src/main.c src/edf_vd.c src/min_heap.c src/utils.c
+SRCS = src/main.c src/edf_vd.c src/min_heap.c src/utils.c src/partition.c
 
 
 OBJS = $(SRCS:.c=.o)
