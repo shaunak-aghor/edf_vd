@@ -1,9 +1,9 @@
 #ifndef MIN_HEAP_H
 #define MIN_HEAP_H
 
-#include "common.h"
+#include <stdbool.h>
 
-
+typedef struct job Job;
 
 //lower the value, higher the priority
 typedef struct {

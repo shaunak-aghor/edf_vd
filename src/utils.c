@@ -81,8 +81,8 @@ int get_next_mode_switch_time(Job* running_job, int current_level, int current_t
 
     // A mode switch fires when the running job burns through its budget
     // for the current criticality level.
-    int current_wcet_budget     = running_job->task->def->wcets[current_level - 1];
-    int budget_remaining         = current_wcet_budget - running_job->time_executed;
+    int current_wcet_budget = running_job->task->def->wcets[current_level - 1];
+    int budget_remaining = current_wcet_budget - running_job->time_executed;
 
     // Only fires if the job would actually exceed the budget before finishing.
     if (budget_remaining > 0 && running_job->exec_time_remaining > budget_remaining)
@@ -108,8 +108,9 @@ void handle_job_completion(Job** running_job_ptr, int current_time, FILE* log_fi
 }
 
 void handle_mode_switch(int* current_level_ptr, int k_boundary, Job** running_job_ptr,
-                        MinHeap* priority_queue, int current_time,
-                        TaskState* tasks, int num_tasks, double* x_table, FILE* log_file)
+                        MinHeap* priority_queue, pthread_mutex_t* queue_lock,
+                        int current_time, TaskState* tasks, int num_tasks,
+                        double* x_table, FILE* log_file)
 {
     (*current_level_ptr)++;
     int new_level = *current_level_ptr;
@@ -173,10 +174,14 @@ void handle_mode_switch(int* current_level_ptr, int k_boundary, Job** running_jo
     }
 
     // Update the ready queue: drop jobs from dropped tasks, reprioritize survivors.
+    pthread_mutex_lock(queue_lock);
     update_heap_for_mode_switch(priority_queue, new_level, k_boundary);
+    pthread_mutex_unlock(queue_lock);
 }
 
-void handle_job_arrival(TaskState* tasks, int num_tasks, int current_time, MinHeap* priority_queue, FILE* log_file)
+void handle_job_arrival(TaskState* tasks, int num_tasks, int current_time,
+                        MinHeap* priority_queue, pthread_mutex_t* queue_lock,
+                        FILE* log_file)
 {
     for (int i = 0; i < num_tasks; i++)
     {
@@ -199,7 +204,9 @@ void handle_job_arrival(TaskState* tasks, int num_tasks, int current_time, MinHe
             // (or updated on the last mode switch).
             new_job->absolute_deadline   = (double)current_time + tasks[i].virtual_deadline;
 
+            pthread_mutex_lock(queue_lock);
             heap_push(priority_queue, new_job, new_job->absolute_deadline);
+            pthread_mutex_unlock(queue_lock);
 
             log_write(log_file, current_time,
                       "Task %d arrived. Spawned Job %d (Exec: %d, DL: %.2f).",

@@ -1,0 +1,15 @@
+->cleanup update heap:
+    Solutions(Choose one):
+        ->Multi-queue.
+        ->Keep as is. ✅
+        ->Lazy filtering the queue.
+
+
+->multi-core
+    ->Core Abstraction
+    ->CPU Abstraction
+    ->Global queue
+    ->Synchronisation
+
+->make it compatible with more than two level system.
+->Better Logging and file structuring.

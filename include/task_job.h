@@ -1,6 +1,7 @@
 #ifndef TASK_JOB_H
 #define TASK_JOB_H
 
+#include <pthread.h>
 #include "min_heap.h"
 #define num_levels 2
 
@@ -41,18 +42,28 @@ typedef struct job
     int time_executed;
 } Job;
 
-typedef struct coreState
+typedef struct core
 {
     int core_id;
+    Job* running_job;
+    FILE* log_file;
+} Core;
+
+typedef struct cpu
+{
+    int num_cores;
+    Core* cores;
+
     int current_level;
     double x_table[num_levels];
     int k_boundary;
+
     FILE* log_file;
+    pthread_mutex_t queue_lock;
     MinHeap* ready_queue;
-    Job* running_job;
+
     TaskState* tasks;
     int num_tasks;
-} CoreState;
-
+} CPU;
 
 #endif

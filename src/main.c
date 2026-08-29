@@ -1,5 +1,15 @@
 #include "../include/common.h"
 
+static CPU* g_cpu = NULL;
+
+static void* core_worker(void* arg)
+{
+    int core_id = *(int*)arg;
+    Core* core = &g_cpu->cores[core_id];
+    simulate_edf_vd(g_cpu, core);
+    return NULL;
+}
+
 int main(int argc, char* argv[])
 {
     if (argc < 2)
@@ -82,19 +92,45 @@ int main(int argc, char* argv[])
         return -4;
     }
 
-    CoreState core;
-    core.core_id       = 0;
-    core.current_level = 1;
-    core.k_boundary    = k_result;
-    core.tasks         = tasks;
-    core.num_tasks     = num_tasks;
-    core.running_job   = NULL;
-    core.ready_queue   = NULL;
-    core.log_file      = log_file;
-    memcpy(core.x_table, x_table, num_levels * sizeof(double));
+    int num_cores = 1;
+    CPU cpu;
+    Core cores[num_cores];
+
+    cpu.num_cores      = num_cores;
+    cpu.cores          = cores;
+    cpu.current_level  = 1;
+    cpu.k_boundary     = k_result;
+    cpu.tasks          = tasks;
+    cpu.num_tasks      = num_tasks;
+    cpu.ready_queue    = heap_init(64);
+    cpu.log_file       = log_file;
+    pthread_mutex_init(&cpu.queue_lock, NULL);
+    memcpy(cpu.x_table, x_table, num_levels * sizeof(double));
+
+    for (int i = 0; i < num_cores; i++)
+    {
+        cores[i].core_id   = i;
+        cores[i].running_job = NULL;
+        cores[i].log_file   = log_file;
+    }
 
     srand(42);
-    simulate_edf_vd(&core);
+    g_cpu = &cpu;
+
+    pthread_t threads[num_cores];
+    int core_ids[num_cores];
+
+    for (int i = 0; i < num_cores; i++)
+    {
+        core_ids[i] = i;
+        pthread_create(&threads[i], NULL, core_worker, &core_ids[i]);
+    }
+
+    for (int i = 0; i < num_cores; i++)
+        pthread_join(threads[i], NULL);
+
+    pthread_mutex_destroy(&cpu.queue_lock);
+    heap_destroy(cpu.ready_queue);
 
     fclose(log_file);
     printf("[INFO] Simulation log written to logs/core_0.log\n");

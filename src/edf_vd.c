@@ -97,21 +97,18 @@ bool edf_vd_preprocess(TaskState* task_set, int num_tasks, double* x_table, int*
 
 // --- Runtime Phase ---
 
-void simulate_edf_vd(CoreState* core)
+void simulate_edf_vd(CPU* cpu, Core* core)
 {
-
-    TaskState* tasks = core->tasks;
-    int num_tasks = core->num_tasks;
+    TaskState* tasks = cpu->tasks;
+    int num_tasks = cpu->num_tasks;
     FILE* log_file = core->log_file;
-    int k_boundary = core->k_boundary;
-    double* x_table = core->x_table;
+    int k_boundary = cpu->k_boundary;
+    double* x_table = cpu->x_table;
 
     int current_time  = 0;
-    int current_level = 1;
-    Job* running_job  = NULL;
-
-    // Initial capacity of 64 — heap auto-resizes.
-    MinHeap* priority_queue = heap_init(64);
+    int current_level = cpu->current_level;
+    Job* running_job  = core->running_job;
+    MinHeap* priority_queue = cpu->ready_queue;
 
     int hyperperiod = calculate_hyperperiod(tasks, num_tasks);
 
@@ -123,7 +120,6 @@ void simulate_edf_vd(CoreState* core)
 
         int next_event_time = min3(t_next_arrival, t_next_completion, t_next_mode_switch);
 
-        //if no event is scheduled and nothing is running, something is wrong.
         if (next_event_time == INT_MAX)
         {
             fprintf(stderr, "[FATAL] No future events and CPU idle at t=%d. "
@@ -131,7 +127,6 @@ void simulate_edf_vd(CoreState* core)
             break;
         }
 
-        // Advance time and account for execution on the running job.
         int elapsed   = next_event_time - current_time;
         current_time  = next_event_time;
 
@@ -141,57 +136,106 @@ void simulate_edf_vd(CoreState* core)
             running_job->exec_time_remaining  -= elapsed;
         }
 
-        // Handle events in order: completion before mode-switch before arrival.
         if (current_time == t_next_completion)
             handle_job_completion(&running_job, current_time, log_file);
 
         if (current_time == t_next_mode_switch)
-            handle_mode_switch(&current_level, k_boundary, &running_job,
-                priority_queue, current_time, tasks, num_tasks, x_table, log_file);
+            handle_mode_switch(&cpu->current_level, k_boundary, &running_job,
+                              priority_queue, &cpu->queue_lock,
+                              current_time, tasks, num_tasks, x_table, log_file);
+
+        current_level = cpu->current_level;
 
         if (current_time == t_next_arrival)
-            handle_job_arrival(tasks, num_tasks, current_time, priority_queue, log_file);
+            handle_job_arrival(tasks, num_tasks, current_time,
+                              priority_queue, &cpu->queue_lock, log_file);
 
-        // Dispatcher: pick from queue if CPU is free.
-        if (running_job == NULL && !heap_is_empty(priority_queue))
+        if (running_job == NULL)
         {
-            running_job = heap_pop(priority_queue);
-            if (running_job != NULL)
-                log_write(log_file, current_time,
-                         "CPU DISPATCH: Job %d (Task %d) starts execution.",
-                         running_job->id, running_job->task->def->id);
-        }
-        
-        // Preemption check
-        else if (running_job != NULL && !heap_is_empty(priority_queue))
-        {
-            Job* peek = heap_peek(priority_queue);
-            if (peek != NULL && peek->absolute_deadline + EPSILON < running_job->absolute_deadline)
+            bool queue_empty = false;
+            pthread_mutex_lock(&cpu->queue_lock);
+            queue_empty = heap_is_empty(priority_queue);
+            pthread_mutex_unlock(&cpu->queue_lock);
+
+            if (!queue_empty)
             {
-                log_write(log_file, current_time,
-                         "PREEMPTION: Job %d (Task %d) preempted by Job %d (Task %d)!",
-                         running_job->id, running_job->task->def->id,
-                         peek->id,        peek->task->def->id);
-
-                heap_push(priority_queue, running_job, running_job->absolute_deadline);
+                pthread_mutex_lock(&cpu->queue_lock);
                 running_job = heap_pop(priority_queue);
+                pthread_mutex_unlock(&cpu->queue_lock);
 
-                log_write(log_file, current_time,
-                         "CPU DISPATCH: Job %d (Task %d) starts execution (post-preemption).",
-                         running_job->id, running_job->task->def->id);
+                if (running_job != NULL)
+                {
+                    core->running_job = running_job;
+                    log_write(log_file, current_time,
+                             "CPU DISPATCH: Job %d (Task %d) starts execution.",
+                             running_job->id, running_job->task->def->id);
+                }
             }
         }
+        else
+        {
+            bool queue_empty = false;
+            pthread_mutex_lock(&cpu->queue_lock);
+            queue_empty = heap_is_empty(priority_queue);
+            pthread_mutex_unlock(&cpu->queue_lock);
+
+            if (!queue_empty)
+            {
+                Job* peek = NULL;
+                pthread_mutex_lock(&cpu->queue_lock);
+                peek = heap_peek(priority_queue);
+                pthread_mutex_unlock(&cpu->queue_lock);
+
+                if (peek != NULL && peek->absolute_deadline + EPSILON < running_job->absolute_deadline)
+                {
+                    log_write(log_file, current_time,
+                             "PREEMPTION: Job %d (Task %d) preempted by Job %d (Task %d)!",
+                             running_job->id, running_job->task->def->id,
+                             peek->id,        peek->task->def->id);
+
+                    pthread_mutex_lock(&cpu->queue_lock);
+                    heap_push(priority_queue, running_job, running_job->absolute_deadline);
+                    running_job = heap_pop(priority_queue);
+                    pthread_mutex_unlock(&cpu->queue_lock);
+
+                    if (running_job != NULL)
+                    {
+                        core->running_job = running_job;
+                        log_write(log_file, current_time,
+                                 "CPU DISPATCH: Job %d (Task %d) starts execution (post-preemption).",
+                                 running_job->id, running_job->task->def->id);
+                    }
+                }
+            }
+        }
+
+        core->running_job = running_job;
     }
 
-    // Cleanup: free any jobs still in the queue at end of hyperperiod.
-    while (!heap_is_empty(priority_queue))
+    while (1)
     {
-        Job* j = heap_pop(priority_queue);
+        bool queue_empty = false;
+        pthread_mutex_lock(&cpu->queue_lock);
+        queue_empty = heap_is_empty(priority_queue);
+        pthread_mutex_unlock(&cpu->queue_lock);
+
+        if (queue_empty)
+            break;
+
+        Job* j = NULL;
+        pthread_mutex_lock(&cpu->queue_lock);
+        j = heap_pop(priority_queue);
+        pthread_mutex_unlock(&cpu->queue_lock);
+
         if (j) free(j);
     }
-    if (running_job) free(running_job);
 
-    heap_destroy(priority_queue);
+    if (running_job)
+    {
+        free(running_job);
+        running_job = NULL;
+    }
+    core->running_job = NULL;
 
     log_write(log_file, current_time,
               "Simulation completed at t=%d (hyperperiod=%d).",
