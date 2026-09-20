@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include "min_heap.h"
 #define num_levels 2
+#define NUM_CORES 64
 
 #define COLOR_RESET   "\x1b[0m"
 #define COLOR_GREEN   "\x1b[32m" // Completions
@@ -47,6 +48,10 @@ typedef struct job
 typedef struct core
 {
     int core_id;
+    int local_time;
+    int next_event_time;
+    int k_boundary;
+    double x_table[num_levels];
     Job* running_job;
     FILE* log_file;
     TaskState* core_tasks;
@@ -57,10 +62,12 @@ typedef struct core
 typedef struct cpu
 {
     int num_cores;
+    int global_time;
+    int next_event_times[NUM_CORES];
+    pthread_barrier_t event_barrier;
+    pthread_barrier_t time_barrier;
     Core* cores;
     int current_level;
-    double x_table[num_levels];
-    int k_boundary;
     int num_tasks;
     TaskState* tasks;
 } CPU;

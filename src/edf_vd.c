@@ -97,17 +97,17 @@ bool edf_vd_preprocess(TaskState* task_set, int num_tasks, double* x_table, int*
 
 // --- Runtime Phase ---
 
-void simulate_edf_vd(CPU* cpu, Core* core)
+void simulate_edf_vd(CPU* cpu, Core* core, int hyperperiod)
 {
     TaskState* tasks = core->core_tasks;
     int num_tasks = core->num_core_tasks;
     FILE* log_file = core->log_file;
-    int k_boundary = cpu->k_boundary;
-    double* x_table = cpu->x_table;
+    int k_boundary = core->k_boundary;
+    double* x_table = core->x_table;
 
     core->ready_queue = heap_init(64);
 
-    int current_time  = 0;
+    int current_time  = core->local_time;
     int current_level = 1;
     Job* running_job  = NULL;
     MinHeap* priority_queue = core->ready_queue;
@@ -118,25 +118,50 @@ void simulate_edf_vd(CPU* cpu, Core* core)
         return;
     }
 
-    int hyperperiod = calculate_hyperperiod(tasks, num_tasks);
 
-    while (current_time < hyperperiod)
+    while (core->local_time < hyperperiod)
     {
         int t_next_arrival     = get_next_arrival_time(tasks, num_tasks);
-        int t_next_completion  = get_next_completion_time(running_job, current_time);
-        int t_next_mode_switch = get_next_mode_switch_time(running_job, current_level, current_time);
+        int t_next_completion  = get_next_completion_time(running_job, core->local_time);
+        int t_next_mode_switch = get_next_mode_switch_time(running_job, current_level, core->local_time);
 
-        int next_event_time = min3(t_next_arrival, t_next_completion, t_next_mode_switch);
+        core->next_event_time = min3(t_next_arrival, t_next_completion, t_next_mode_switch);
+        cpu->next_event_times[core->core_id] = core->next_event_time;
 
-        if (next_event_time == INT_MAX)
+        log_write(log_file, core->local_time,
+              "TIME SYNC: Core %d publishing next event at t=%d.",
+              core->core_id, core->next_event_time);
+
+        int barrier_result = pthread_barrier_wait(&cpu->event_barrier);
+        if (barrier_result == PTHREAD_BARRIER_SERIAL_THREAD)
         {
-            fprintf(stderr, "[FATAL] No future events and CPU idle at t=%d. "
-                            "Possible deadlock or input bug.\n", current_time);
-            break;
+            int global_next_time = INT_MAX;
+
+            for (int i = 0; i < cpu->num_cores; i++)
+            {
+                if (cpu->next_event_times[i] < global_next_time)
+                    global_next_time = cpu->next_event_times[i];
+            }
+
+            if (global_next_time == INT_MAX || global_next_time > hyperperiod)
+                global_next_time = hyperperiod;
+
+            cpu->global_time = global_next_time;
+
+            log_write(log_file, core->local_time,
+                      "TIME SYNC: Global time selected as t=%d.",
+                      cpu->global_time);
         }
 
-        int elapsed   = next_event_time - current_time;
-        current_time  = next_event_time;
+        pthread_barrier_wait(&cpu->time_barrier);
+
+        int elapsed = cpu->global_time - core->local_time;
+        current_time = cpu->global_time;
+        core->local_time = cpu->global_time;
+
+        log_write(log_file, current_time,
+                  "TIME SYNC: Core %d synchronized to t=%d (advanced by %d).",
+                  core->core_id, core->local_time, elapsed);
 
         if (running_job != NULL)
         {

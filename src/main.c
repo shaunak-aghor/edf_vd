@@ -1,12 +1,20 @@
 #include "../include/common.h"
 #include "../include/partition.h"
+#include <limits.h>
 
 static CPU* g_cpu = NULL;
 
+typedef struct
+{
+    Core* core;
+    int hyperperiod;
+} CoreWorkerArgs;
+
 static void* core_worker(void* arg)
 {
-    Core* core = (Core *) arg;
-    simulate_edf_vd(g_cpu, core);
+    CoreWorkerArgs* args = arg;
+
+    simulate_edf_vd(g_cpu, args->core, args->hyperperiod);
     return NULL;
 }
 
@@ -63,31 +71,10 @@ int main(int argc, char* argv[])
 
     printf("Read %d tasks successfully.\n", num_tasks);
 
-    double x_table[num_levels];
-    int k_result = -1;
-
-    if (!edf_vd_preprocess(tasks, num_tasks, x_table, &k_result))
-    {
-        printf("[RESULT] Task set is NOT schedulable under EDF-VD.\n");
-        return -3;
-    }
-
-    printf(COLOR_MAGENTA "Pre-processing successful.\n" COLOR_RESET);
-    printf("  k_boundary = %d\n", k_result);
-    for (int i = 0; i < num_levels; i++)
-        printf("  x_table[%d] = %.4f\n", i, x_table[i]);
-    printf("\n");
-
-    for (int i = 0; i < num_tasks; i++)
-        printf("  Task %d | level=%d | period=%d | wcets=[%d,%d] | virtual_deadline=%.4f\n",
-               defs[i].id, defs[i].level, defs[i].period,
-               defs[i].wcets[0], defs[i].wcets[1],
-               tasks[i].virtual_deadline);
-
     int num_cores = argc >= 3 ? atoi(argv[2]) : 1;
-    if (num_cores <= 0)
+    if (num_cores <= 0 || num_cores > NUM_CORES)
     {
-        printf("[ERROR] Number of cores must be greater than zero.\n");
+        printf("[ERROR] Number of cores must be between 1 and %d.\n", NUM_CORES);
         return -4;
     }
 
@@ -115,16 +102,18 @@ int main(int argc, char* argv[])
     }
 
     cpu.num_cores      = num_cores;
+    cpu.global_time    = 0;
     cpu.cores          = cores;
     cpu.current_level  = 1;
-    cpu.k_boundary     = k_result;
     cpu.tasks          = tasks;
     cpu.num_tasks      = num_tasks;
-    memcpy(cpu.x_table, x_table, num_levels * sizeof(double));
 
     for (int i = 0; i < num_cores; i++)
     {
         cores[i].core_id     = i;
+        cores[i].local_time  = 0;
+        cores[i].next_event_time = INT_MAX;
+        cores[i].k_boundary = -1;
         cores[i].running_job = NULL;
         cores[i].num_core_tasks = core_task_counts[i];
         cores[i].core_tasks = calloc(core_task_counts[i] > 0 ? core_task_counts[i] : 1,
@@ -137,13 +126,6 @@ int main(int argc, char* argv[])
         if (cores[i].core_tasks == NULL || cores[i].log_file == NULL)
         {
             printf("[ERROR] Could not initialize core %d.\n", i);
-            for (int cleanup = 0; cleanup <= i; cleanup++)
-            {
-                if (cores[cleanup].log_file != NULL)
-                    fclose(cores[cleanup].log_file);
-                free(cores[cleanup].core_tasks);
-            }
-            free(cores);
             return -7;
         }
 
@@ -153,20 +135,59 @@ int main(int argc, char* argv[])
             if (tasks[task].assigned_core == i)
                 cores[i].core_tasks[local_task++] = tasks[task];
         }
+
+        if (cores[i].num_core_tasks > 0 && !edf_vd_preprocess(cores[i].core_tasks, cores[i].num_core_tasks, cores[i].x_table, &cores[i].k_boundary))
+        {
+            printf("[RESULT] Core %d task partition is NOT schedulable under EDF-VD.\n", i);
+            return -3;
+        }
+
+        printf(COLOR_MAGENTA "Core %d preprocessing successful.\n" COLOR_RESET,
+               i);
+        printf("  k_boundary = %d\n", cores[i].k_boundary);
+        for (int level = 0; level < num_levels; level++)
+            printf("  x_table[%d] = %.4f\n", level, cores[i].x_table[level]);
     }
+
+    for (int i = 0; i < num_cores; i++)
+        cpu.next_event_times[i] = cores[i].next_event_time;
 
     srand(42);
     g_cpu = &cpu;
 
+    int max_hyperperiod = 0;
+    for (int i = 0; i < num_cores; i++)
+    {
+        if (cores[i].num_core_tasks == 0)
+            continue;
+
+        int cur_hyperperiod = calculate_hyperperiod(cores[i].core_tasks, cores[i].num_core_tasks);
+
+        if(cur_hyperperiod > max_hyperperiod)
+        {
+            max_hyperperiod = cur_hyperperiod;
+        }
+    }
+
+    pthread_barrier_init(&cpu.event_barrier, NULL, num_cores);
+
+    pthread_barrier_init(&cpu.time_barrier, NULL, num_cores);
+
     pthread_t threads[num_cores];
+    CoreWorkerArgs worker_args[num_cores];
 
     for (int i = 0; i < num_cores; i++)
     {
-        pthread_create(&threads[i], NULL, core_worker, &cores[i]);
+        worker_args[i].core = &cores[i];
+        worker_args[i].hyperperiod = max_hyperperiod;
+        pthread_create(&threads[i], NULL, core_worker, &worker_args[i]);
     }
 
     for (int i = 0; i < num_cores; i++)
         pthread_join(threads[i], NULL);
+
+    pthread_barrier_destroy(&cpu.time_barrier);
+    pthread_barrier_destroy(&cpu.event_barrier);
 
     for (int i = 0; i < num_cores; i++)
     {

@@ -1,16 +1,10 @@
-->cleanup update heap:
-    Solutions(Choose one):
-        ->Multi-queue.
-        ->Keep as is. ✅
-        ->Lazy filtering the queue.
-
-
 ->multi-core
     ->Core Abstraction ✅
     ->CPU Abstraction ✅
     ->local queue ✅
-    ->Synchronisation 
+    ->Synchronisation ✅
+    ->Global mode switch 
 
 
--> do we want the preprocessing running per core ?
--> how do we communicate the mode switch caused in one core to the other cores ?
+-> run preprocess per core ✅
+-> how do we communicate the mode switch caused in one core to the other cores ? signalling.
