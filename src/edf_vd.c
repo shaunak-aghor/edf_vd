@@ -126,6 +126,17 @@ void simulate_edf_vd(CPU* cpu, Core* core, int hyperperiod)
         int t_next_mode_switch = get_next_mode_switch_time(running_job, current_level, core->local_time);
 
         core->next_event_time = min3(t_next_arrival, t_next_completion, t_next_mode_switch);
+        int next_event_type = 0;
+        if (core->next_event_time != INT_MAX)
+        {
+            if (t_next_mode_switch == core->next_event_time)
+                next_event_type = 3;
+            else if (t_next_completion == core->next_event_time)
+                next_event_type = 2;
+            else
+                next_event_type = 1;
+        }
+        cpu->next_event_type[core->core_id] = next_event_type;
         cpu->next_event_times[core->core_id] = core->next_event_time;
 
         log_write(log_file, core->local_time,
@@ -136,15 +147,29 @@ void simulate_edf_vd(CPU* cpu, Core* core, int hyperperiod)
         if (barrier_result == PTHREAD_BARRIER_SERIAL_THREAD)
         {
             int global_next_time = INT_MAX;
+            cpu->core_winner_event_type = 0;
 
             for (int i = 0; i < cpu->num_cores; i++)
             {
                 if (cpu->next_event_times[i] < global_next_time)
+                {
                     global_next_time = cpu->next_event_times[i];
+                    cpu->core_winner_event_type = cpu->next_event_type[i];
+                }
+                else if (cpu->next_event_times[i] == global_next_time &&
+                         (cpu->next_event_type[i] == 3 ||
+                          (cpu->core_winner_event_type != 3 &&
+                           cpu->next_event_type[i] > cpu->core_winner_event_type)))
+                {
+                    cpu->core_winner_event_type = cpu->next_event_type[i];
+                }
             }
 
             if (global_next_time == INT_MAX || global_next_time > hyperperiod)
+            {
                 global_next_time = hyperperiod;
+                cpu->core_winner_event_type = 0;
+            }
 
             cpu->global_time = global_next_time;
 
@@ -172,7 +197,7 @@ void simulate_edf_vd(CPU* cpu, Core* core, int hyperperiod)
         if (current_time == t_next_completion)
             handle_job_completion(&running_job, current_time, log_file);
 
-        if (current_time == t_next_mode_switch)
+        if (cpu->core_winner_event_type == 3)
             handle_mode_switch(&current_level, k_boundary, &running_job,
                               priority_queue,
                               current_time, tasks, num_tasks, x_table, log_file);

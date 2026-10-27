@@ -137,8 +137,8 @@ void handle_mode_switch(int* current_level_ptr, int k_boundary, Job** running_jo
         {
             tasks[i].active = false;    // mark dropped
             log_write(log_file, current_time,
-                      "Task %d (level %d) dropped permanently.",
-                      tasks[i].def->id, tasks[i].def->level);
+                    "Task %d (level %d) dropped permanently.",
+                    tasks[i].def->id, tasks[i].def->level);
         }
         else
         {
@@ -163,8 +163,7 @@ void handle_mode_switch(int* current_level_ptr, int k_boundary, Job** running_jo
         {
             // HI task above k_boundary: extend deadline using the new virtual deadline.
             double old_dl = (*running_job_ptr)->absolute_deadline;
-            (*running_job_ptr)->absolute_deadline =
-                (double)(*running_job_ptr)->arrival_time + (*running_job_ptr)->task->virtual_deadline;
+            (*running_job_ptr)->absolute_deadline = (double)(*running_job_ptr)->arrival_time + (*running_job_ptr)->task->virtual_deadline;
 
             log_write(log_file, current_time,
                       "Running Job %d (Task %d) deadline updated: %.2f -> %.2f",

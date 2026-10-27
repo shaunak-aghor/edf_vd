@@ -63,7 +63,9 @@ typedef struct cpu
 {
     int num_cores;
     int global_time;
+    int core_winner_event_type;
     int next_event_times[NUM_CORES];
+    int next_event_type[NUM_CORES];
     pthread_barrier_t event_barrier;
     pthread_barrier_t time_barrier;
     Core* cores;

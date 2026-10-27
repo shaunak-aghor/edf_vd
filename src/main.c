@@ -189,6 +189,7 @@ int main(int argc, char* argv[])
     pthread_barrier_destroy(&cpu.time_barrier);
     pthread_barrier_destroy(&cpu.event_barrier);
 
+
     for (int i = 0; i < num_cores; i++)
     {
         fclose(cores[i].log_file);
